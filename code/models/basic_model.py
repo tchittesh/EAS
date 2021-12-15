@@ -261,7 +261,7 @@ class BasicModel:
 			for dim in shape:
 				variable_parameters *= dim.value
 			total_parameters += variable_parameters
-		print('Total training params: %.2fM' % (total_parameters / 1e6))
+		print('Total training params: %d' % total_parameters)
 	
 	@staticmethod
 	def dropout(_input, keep_prob, is_training):

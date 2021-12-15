@@ -1,6 +1,8 @@
 """
 Manage the folder for architecture search
 """
+import operator
+from functools import reduce
 import os
 import subprocess
 import json
@@ -18,6 +20,7 @@ class NetPool:
 		
 		self.net_str2id = {}
 		self.net_id2val = {}
+		self.net_id2params = {}
 		self.running_set = {'stone': 0}
 		
 		self.on_load()
@@ -29,6 +32,10 @@ class NetPool:
 	@property
 	def id2val_path(self):
 		return '%s/net.id2val' % self.path
+
+	@property
+	def id2params_path(self):
+		return '%s/net.id2params' % self.path
 	
 	def on_load(self):
 		if os.path.isfile(self.str2id_path):
@@ -91,10 +98,15 @@ class NetPool:
 		# folder_path = self.get_net_folder(net_id)
 		# self.running_set.pop(net_str)
 		# os.rename(net_folder, os.path.join(self.path, folder_path))
+
+	def update_params(self, net_str_list, params_list):
+		for net_str, params in zip(net_str_list, params_list):
+			self.net_id2params[self.net_str2id[net_str]] = params
 	
 	def save(self):
 		json.dump(self.net_str2id, open(self.str2id_path, 'w'), indent=4)
 		json.dump(self.net_id2val, open(self.id2val_path, 'w'), indent=4)
+		json.dump(self.net_id2params, open(self.id2params_path, 'w'), indent=4)
 	
 	@staticmethod
 	def get_net_folder(net_id):
@@ -113,8 +125,10 @@ class ArchManager:
 		
 		self.episode = 0
 		self.net_val_wrt_episode = []
+		self.net_params_wrt_episode = []
 		
 		self.val_log_writer = open(self.val_logs_path, 'a')
+		self.params_logs_writer = open(self.params_logs_path, 'a')
 		self.net_log_writer = open(self.net_logs_path, 'a')
 		self.on_load()
 	
@@ -125,6 +139,10 @@ class ArchManager:
 	@property
 	def val_logs_path(self):
 		return '%s/val.log' % self.arch_path
+
+	@property
+	def params_logs_path(self):
+		return '%s/params.log' % self.arch_path
 	
 	@property
 	def net_logs_path(self):
@@ -139,7 +157,25 @@ class ArchManager:
 					net_val_list = line.split('\t')[4:]
 					net_val_list = [float(net_val) for net_val in net_val_list]
 					self.net_val_wrt_episode.append(net_val_list)
-				
+		if os.path.isfile(self.params_logs_path):
+			with open(self.params_logs_path, 'r') as fin:
+				for line in fin.readlines():
+					line = line[:-1]
+					params_list = line.split('\t')[2:]
+					params_list = [float(params) for params in params_list]
+					self.net_params_wrt_episode.append(params_list)
+
+	def update_start_net(self, net_str):
+		net_id = self.net_pool.net_str2id[net_str]
+		net_folder1 = '%s/#Running_%s' % (self.net_pool.path, net_id)
+		net_folder2 = '%s/#%s' % (self.net_pool.path, net_id)
+		if os.path.isdir(net_folder1):
+			self.start_net_monitor = ExpdirMonitor(net_folder1)
+		elif os.path.isdir(net_folder2):
+			self.start_net_monitor = ExpdirMonitor(net_folder2)
+		self.start_net_config = None
+		self.get_start_net()
+
 	def get_start_net(self, copy=False):
 		if self.start_net_config is None:
 			# prepare start net
@@ -193,14 +229,39 @@ class ArchManager:
 			self.net_pool.on_running_finished(net_str, net_folder, net_val)
 			for _id in idx:
 				net_val_list[_id] = net_val
+		params_list = self.get_net_params(net_str_list)
+		self.net_pool.update_params(net_str_list, params_list)
 		self.log_nets(net_str_list, episode_total_running_time)
 		self.net_pool.save()
 		return net_val_list
+
+	def get_net_params(self, net_str_list):
+		param_list = []
+		for net_str in net_str_list:
+			net_id = self.net_pool.net_str2id.get(net_str)
+			net_folder1 = '%s/#Running_%s' % (self.net_pool.path, net_id)
+			net_folder2 = '%s/#%s' % (self.net_pool.path, net_id)
+			if os.path.isdir(net_folder1):
+				em = ExpdirMonitor(net_folder1)
+			elif os.path.isdir(net_folder2):
+				em = ExpdirMonitor(net_folder2)
+			init = em.load_init()
+			total_params = 0
+			for layer in init['layer_cascade']['layers']:
+				if layer is None:
+					continue
+				for k, v in layer.items():
+					if 'moving_' not in k:
+						total_params += reduce(operator.mul, v.shape)
+			param_list.append(total_params)
+		return param_list
 	
-	def val2reward(self, net_val_list, func=None):
+	def val2reward(self, net_val_list, func=None, params_list=None):
 		rewards = []
-		for net_val in net_val_list:
-			if func is None:
+		for i, net_val in enumerate(net_val_list):
+			if params_list is not None:
+				rewards.append(np.tan(net_val * np.pi / 2) - params_list[i]/5e4)
+			elif func is None:
 				rewards.append(net_val)
 			elif func == 'tan':
 				reward = np.tan(net_val * np.pi / 2)
@@ -209,15 +270,22 @@ class ArchManager:
 				raise NotImplementedError
 		return rewards
 		
-	def reward(self, net_val_list, reward_config):
-		rewards = self.val2reward(net_val_list, reward_config.get('func'))
+	def reward(self, net_val_list, net_str_list, reward_config):
+		use_params = reward_config.get('use_params', False)
+		if use_params:
+			net_id_list = [self.net_pool.net_str2id[net_str] for net_str in net_str_list]
+			params_list = [self.net_pool.net_id2params[net_id] for net_id in net_id_list]
+		else:
+			params_list = None
+		rewards = self.val2reward(net_val_list, reward_config.get('func'), params_list=params_list)
 		rewards = np.array(rewards)
 		# baseline function
 		decay = reward_config['decay']
 		if 'exp_moving_avg' not in self.__dict__:
 			self.exp_moving_avg = 0
-			for old_net_val_list in self.net_val_wrt_episode[:-1]:
-				old_rewards = self.val2reward(old_net_val_list, reward_config.get('func'))
+			for old_net_val_list, old_params_list in zip(self.net_val_wrt_episode[:-1], self.net_params_wrt_episode[:-1]):
+				params_list = old_params_list if use_params else None
+				old_rewards = self.val2reward(old_net_val_list, reward_config.get('func'), params_list=old_params_list)
 				self.exp_moving_avg += decay * (np.mean(old_rewards) - self.exp_moving_avg)
 		self.exp_moving_avg += decay * (np.mean(rewards) - self.exp_moving_avg)
 		return rewards - self.exp_moving_avg
@@ -231,14 +299,21 @@ class ArchManager:
 		mean_val, max_val = np.mean(net_val_list), np.max(net_val_list)
 		self.net_log_writer.write('%d.\t nets=%d (total=%d)\t%s\n' % (self.episode, new_nets_num, nets_num,
 														'\t'.join([str(net_id) for net_id in net_id_list])))
+
 		log_str = '%d.\t nets=%d (total=%d)\t mean_val=%s (max_val=%s)\t using %s(min)\t%s' % \
 				  (self.episode + 1, new_nets_num, nets_num, mean_val, max_val, running_time,
 				   '\t'.join([str(net_val) for net_val in net_val_list]))
 		if print_info:
 			print(log_str)
 		self.val_log_writer.write(log_str + '\n')
+
+		params_list = [self.net_pool.net_id2params[net_id] for net_id in net_id_list]
+		self.params_logs_writer.write('%d.\t nets=%d (total=%d)\t%s\n' % (self.episode, new_nets_num, nets_num,
+														'\t'.join([str(params) for params in params_list])))
 		
 		self.val_log_writer.flush()
 		self.net_log_writer.flush()
+		self.params_logs_writer.flush()
 		self.net_val_wrt_episode.append(net_val_list)
+		self.net_params_wrt_episode.append(params_list)
 		self.episode += 1

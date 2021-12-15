@@ -2,12 +2,12 @@ from subprocess import Popen, PIPE
 from threading import Thread, Lock
 from queue import Queue
 from time import sleep
-from sys import stderr
+from sys import stderr, stdout
 import re
 import json
 import shlex
 
-max_running_machine = 5
+max_running_machine = 10
 
 _max_used_mem = 0.3
 _max_used_gpu = 0.3
@@ -85,7 +85,7 @@ class RemoteController:
 			self._occupied = val
 	
 	def run(self, cmd, stdin=None):
-		proc = Popen('ssh {} {}'.format(self.remote, shlex.quote(cmd)), shell=True, stdin=PIPE, stdout=PIPE,
+		proc = Popen(cmd, shell=True, stdin=PIPE, stdout=PIPE,
 					 universal_newlines=True)
 		return proc.communicate(input=stdin)[0]
 	
@@ -95,7 +95,7 @@ class RemoteController:
 	
 	@property
 	def exe_cmd(self):
-		return 'CUDA_VISIBLE_DEVICES={gpuid} python3 {executive}'.format(
+		return 'CUDA_VISIBLE_DEVICES={gpuid} python {executive}'.format(
 			executive=self.executive,
 			gpuid=self.gpuid
 		)
@@ -112,7 +112,7 @@ class RemoteController:
 	def remote_executer(self, idx, expdir, queue):
 		self.occupied = True
 		cmd = self.exe_cmd
-		print('{}: {} {}'.format(self.remote, cmd, expdir), file=stderr)
+		print('{}: {} {}'.format(self.remote, cmd, expdir), file=stdout)
 		result = self.run(cmd, stdin=expdir)
 		try:
 			result = str(result).split('\n')
@@ -126,10 +126,10 @@ class RemoteController:
 			result = float(result)
 			queue.put([idx, (result, used_time)])
 			print('{}th task: {} is successfully executed, result is {}, using {} min.'.
-				  format(idx, expdir, result, used_time), file=stderr)
+				  format(idx, expdir, result, used_time), file=stdout)
 		except Exception:
 			queue.put([idx, expdir])
-			print('{}th task: {} fails, with return: %s.'.format(idx, expdir, result), file=stderr)
+			print('{}th task: {} fails, with return: {}.'.format(idx, expdir, result), file=stdout)
 		self.occupied = False
 	
 	def execute(self, idx, expdir, queue):
@@ -139,6 +139,7 @@ class RemoteController:
 			self._on_running = [idx, expdir]
 			thr = Thread(target=self.remote_executer, args=(idx, expdir, queue))
 			thr.start()
+			self.occupied = True
 			self._on_running = None
 
 

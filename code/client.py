@@ -6,6 +6,8 @@ import os
 from expdir_monitor.expdir_monitor import ExpdirMonitor
 import time
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
 
 
 def run(expdir):

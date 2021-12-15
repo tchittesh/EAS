@@ -1,5 +1,12 @@
 [
-	["<client 1 address>", <gpu_id_0>, "<path to the **code** folder on client 1>/client.py"],
-	["<client 2 address>", <gpu_id_0>, "<path to the **code** folder on client 2>/client.py"],
-	["<client 2 address>", <gpu_id_1>, "<path to the **code** folder on client 2>/client.py"]
+	["localhost", 0, "/home/cthavama/repo/EAS/code/client.py"],
+	["localhost", 1, "/home/cthavama/repo/EAS/code/client.py"],
+	["localhost", 2, "/home/cthavama/repo/EAS/code/client.py"],
+	["localhost", 3, "/home/cthavama/repo/EAS/code/client.py"],
+	["localhost", 4, "/home/cthavama/repo/EAS/code/client.py"],
+	["localhost", 5, "/home/cthavama/repo/EAS/code/client.py"],
+	["localhost", 6, "/home/cthavama/repo/EAS/code/client.py"],
+	["localhost", 7, "/home/cthavama/repo/EAS/code/client.py"],
+	["localhost", 8, "/home/cthavama/repo/EAS/code/client.py"],
+	["localhost", 9, "/home/cthavama/repo/EAS/code/client.py"]
 ]

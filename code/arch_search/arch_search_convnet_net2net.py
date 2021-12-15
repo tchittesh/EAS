@@ -165,7 +165,8 @@ def apply_deeper_decision(deeper_decision, net_configs, kernel_size_list, noise)
 		return np.concatenate(decision_mask, axis=0), to_set_layers
 	
 
-def arch_search_convnet(start_net_path, arch_search_folder, net_pool_folder, max_episodes, random=False):
+def arch_search_convnet(start_net_path, arch_search_folder, net_pool_folder, max_episodes, 
+						random=False, use_params=False, update_start=None):
 	filter_num_list = [_i for _i in range(4, 44, 4)]
 	units_num_list = [_i for _i in range(8, 88, 8)]
 	# filter_num_list = [16, 32, 64, 96, 128, 192, 256, 320, 384, 448, 512, 576, 640]
@@ -232,6 +233,10 @@ def arch_search_convnet(start_net_path, arch_search_folder, net_pool_folder, max
 	
 	# reward config
 	reward_config = {
+		'use_params': True,
+		'func': 'tan',
+		'decay': 0.95,
+	} if use_params else {
 		'func': 'tan',
 		'decay': 0.95,
 	}
@@ -304,6 +309,7 @@ def arch_search_convnet(start_net_path, arch_search_folder, net_pool_folder, max
 			to_set_layers = [[] for _ in range(episode_config['batch_size'])]
 			for _j in range(episode_config['deeper_action_num']):
 				input_seq, seq_len = get_net_seq(net_configs, encoder.vocab, encoder.num_steps)
+				print(input_seq.shape, seq_len)
 				block_layer_num = get_block_layer_num(net_configs)
 				deeper_decision, deeper_probs = meta_controller.sample_deeper_decision(input_seq, seq_len,
 				                                                                       block_layer_num)
@@ -344,7 +350,9 @@ def arch_search_convnet(start_net_path, arch_search_folder, net_pool_folder, max
 		net_str_list = get_net_str(net_configs)
 		
 		net_vals = arch_manager.get_net_vals(net_str_list, net_configs, run_configs)
-		rewards = arch_manager.reward(net_vals, reward_config)
+		rewards = arch_manager.reward(net_vals, net_str_list, reward_config)
+
+		best_index = np.argmax(np.array(rewards))
 		
 		rewards = np.concatenate([rewards for _ in range(episode_config['wider_action_num'] +
 														 episode_config['deeper_action_num'])])
@@ -358,6 +366,8 @@ def arch_search_convnet(start_net_path, arch_search_folder, net_pool_folder, max
 			
 			meta_controller.save()
 		# episode end
+		if update_start is not None and _i % update_start == 0:
+			arch_manager.update_start_net(net_str_list[best_index])
 		time_per_episode = time() - start_time
 		seconds_left = int((max_episodes - _i) * time_per_episode)
 		print('Time per Episode: %s, Est. complete in: %s' % (
