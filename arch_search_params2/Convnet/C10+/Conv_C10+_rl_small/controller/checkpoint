@@ -1,0 +1,2 @@
+model_checkpoint_path: "/home/cthavama/repo/EAS/arch_search_params2/Convnet/C10+/Conv_C10+_rl_small/controller/model.ckpt"
+all_model_checkpoint_paths: "/home/cthavama/repo/EAS/arch_search_params2/Convnet/C10+/Conv_C10+_rl_small/controller/model.ckpt"

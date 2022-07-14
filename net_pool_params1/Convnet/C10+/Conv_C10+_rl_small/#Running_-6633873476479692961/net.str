@@ -1,0 +1,3 @@
+{
+    "net_str": "conv-8-3_pool_conv-16-3_conv-16-3_pool_conv-4-3_conv-4-3_pool_conv-4-3_conv-4-3_pool_fc-8_fc-8_fc-8"
+}

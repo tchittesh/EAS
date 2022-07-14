@@ -1,0 +1,3 @@
+{
+    "net_str": "conv-36-3_conv-40-5_conv-40-3_conv-40-5_conv-40-3_pool_conv-40-3_conv-40-1_conv-40-5_conv-40-5_conv-40-1_conv-40-3_conv-36-5_conv-36-5_pool_conv-40-3_conv-40-1_conv-40-1_conv-36-5_pool_conv-36-3_conv-36-5_conv-36-5_pool_fc-80_fc-40_fc-40_fc-80_fc-80"
+}
